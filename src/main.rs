@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use dante_control_rs::DanteDeviceManager;
-use log::{debug, error, info, trace, warn};
 use std::thread::sleep;
 use std::time::Duration;
 

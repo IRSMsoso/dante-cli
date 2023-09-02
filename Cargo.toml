@@ -3,12 +3,15 @@ name = "dante-cli"
 version = "0.1.0"
 edition = "2021"
 authors = ["Cameron VanderTuig"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A Dante discovery and control command line tool utilizing dante-control-rs"
+repository = "https://github.com/IRSMsoso/dante-cli"
+homepage = "https://github.com/IRSMsoso/dante-cli"
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["dante", "audio"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.4.2", features = ["derive"] }
-dante-control-rs = { path = "../dante-control-rs" }
-tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
+dante-control-rs = { path = "../dante-control-rs", version = "0.1.0"}
 stderrlog = "0.5.4"
-log = "0.4.20"

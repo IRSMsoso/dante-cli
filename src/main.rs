@@ -23,12 +23,21 @@ enum Commands {
         /// Seconds to wait for mDNS to resolve before printing discovered devices
         #[arg(default_value_t = 2.0, short, long)]
         time: f32,
+
+        /// Print detailed info instead of just device names.
+        #[arg(default_value_t = false, short, long)]
+        detailed: bool,
     },
 
     /// Monitors dante devices and prints device info every <print_interval> seconds.
     Monitor {
+        /// Interval to print values to stdout
         #[arg(default_value_t = 2.0, short, long)]
         print_interval: f32,
+
+        /// Print detailed info instead of just device names.
+        #[arg(short, long)]
+        detailed: bool,
     },
 
     /// Lists information about mDNS discovery on the "_netaudio-cmc._udp.local." address.
@@ -72,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to initialize stderrlog");
 
     match &args.command {
-        Some(Commands::ListDevices { time }) => {
+        Some(Commands::ListDevices { time, detailed }) => {
             let device_manager = DanteDeviceManager::new();
             device_manager.start_discovery()?;
 
@@ -85,14 +94,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             device_manager.stop_discovery();
 
             if !args.quiet {
-                println!("Devices Found:");
+                println!("Devices Found:\n");
             }
 
-            for device_name in device_manager.get_device_names() {
-                println!("{}", device_name);
+            if !*detailed {
+                for device_name in device_manager.get_device_names() {
+                    println!("{}", device_name);
+                }
+            } else {
+                for device_info in device_manager.get_device_descriptions() {
+                    println!("{}", device_info);
+                    println!("---------------------------------");
+                }
             }
         }
-        Some(Commands::Monitor { print_interval }) => {
+        Some(Commands::Monitor {
+            print_interval,
+            detailed,
+        }) => {
             let device_manager = DanteDeviceManager::new();
             device_manager.start_discovery()?;
 
@@ -102,9 +121,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             loop {
                 sleep(Duration::from_secs_f32(*print_interval));
-                println!("==============================");
-                for device_name in device_manager.get_device_names() {
-                    println!("{}", device_name);
+                println!("=================================");
+                if !*detailed {
+                    for device_name in device_manager.get_device_names() {
+                        println!("{}", device_name);
+                    }
+                } else {
+                    for device_info in device_manager.get_device_descriptions() {
+                        println!("{}", device_info);
+                        println!("---------------------------------");
+                    }
                 }
             }
         }

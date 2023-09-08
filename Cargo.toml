@@ -15,3 +15,7 @@ categories = ["command-line-utilities"]
 clap = { version = "4.4.2", features = ["derive"] }
 dante-control-rs = { path = "../dante-control-rs", version = "0.3.0"}
 stderrlog = "0.5.4"
+ascii = "1.1.0"
+
+# a little tool that will help us later.
+shellwords = "1.1.0"

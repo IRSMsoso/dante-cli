@@ -1,6 +1,9 @@
 use ascii::AsAsciiStr;
 use clap::{arg, Parser, Subcommand};
 use dante_control_rs::{print_arc, print_chan, print_cmc, print_dbc, DanteDeviceManager};
+use std::fs::File;
+use std::io;
+use std::io::BufRead;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -58,15 +61,25 @@ enum ControlCommands {
         transmitter_name: String,
 
         /// Channel id of the dante device to transmit the new subscription
-        transmitter_channel_id: u16,
+        transmitter_channel_name: String,
 
         /// Name of the dante device to receive the new subscription
         receiver_name: String,
 
         /// Channel id of the dante device to receive the new subscription
-        receiver_channel_id: u16,
+        receiver_channel_index: u16,
 
-        /// Seconds to wait for mDNS to resolve before printing discovered devices
+        /// Seconds to wait for mDNS to resolve before making subscription
+        #[arg(default_value_t = 5.0, short, long)]
+        time: f32,
+    },
+
+    /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverDeviceName. Note the receiver using an index instead of a channel name.
+    MakeSubscriptionsFromFile {
+        /// Path of file to read from.
+        file_path: String,
+
+        /// Seconds to wait for mDNS to resolve before making subscriptions
         #[arg(default_value_t = 5.0, short, long)]
         time: f32,
     },
@@ -101,6 +114,18 @@ enum DebugCommands {
         #[arg(default_value_t = 2.0, short, long)]
         time: f32,
     },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParsingError {
+    #[error("Could not properly detect : between the transmitting and receiving devices")]
+    TxRxDelimiter,
+    #[error("Could not properly detect @ between the transmitting channel and device name")]
+    TxDelimiter,
+    #[error("Could not properly detect @ between the receiving channel index and device name")]
+    RxDelimiter,
+    #[error("Could not parse the receiving channel index into an integer")]
+    RxChanIndexParse,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -182,19 +207,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 print_chan(Duration::from_secs_f32(*time));
             }
         },
-        None => {
-            println!("No command specified. Try \"dante-cli help\"");
-        }
         Some(Commands::Control(control_command)) => match control_command {
             ControlCommands::MakeSubscription {
                 transmitter_name,
-                transmitter_channel_id,
+                transmitter_channel_name,
                 receiver_name,
-                receiver_channel_id,
+                receiver_channel_index,
                 time,
             } => {
                 let receiver_name_ascii = receiver_name.as_ascii_str()?;
                 let transmitter_name_ascii = transmitter_name.as_ascii_str()?;
+                let transmitter_channel_name_ascii = transmitter_channel_name.as_ascii_str()?;
 
                 let mut device_manager = DanteDeviceManager::new();
                 device_manager.start_discovery()?;
@@ -209,12 +232,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 device_manager.make_subscription(
                     receiver_name_ascii,
-                    *receiver_channel_id,
+                    *receiver_channel_index,
                     transmitter_name_ascii,
-                    *transmitter_channel_id,
+                    transmitter_channel_name_ascii,
                 )?;
             }
+            ControlCommands::MakeSubscriptionsFromFile { file_path, time } => {
+                let mut device_manager = DanteDeviceManager::new();
+                device_manager.start_discovery()?;
+
+                if !args.quiet {
+                    println!("Discovering Devices...");
+                }
+
+                sleep(Duration::from_secs_f32(*time));
+
+                device_manager.stop_discovery();
+
+                let file = File::open(file_path)?;
+                let lines = io::BufReader::new(file).lines();
+                for line in lines.flatten() {
+                    let (tx, rx) = line.split_once(':').ok_or(ParsingError::TxRxDelimiter)?;
+                    let (tx_chan, tx_device) =
+                        tx.split_once('@').ok_or(ParsingError::TxDelimiter)?;
+                    let (rx_chan, rx_device) =
+                        rx.split_once('@').ok_or(ParsingError::RxDelimiter)?;
+                    let rx_chan_index: u16 = match rx_chan.parse() {
+                        Ok(chan_index) => Ok(chan_index),
+                        Err(_) => Err(ParsingError::RxChanIndexParse),
+                    }?;
+
+                    let receiver_name_ascii = rx_device.as_ascii_str()?;
+                    let transmitter_name_ascii = tx_device.as_ascii_str()?;
+                    let transmitter_channel_name_ascii = tx_chan.as_ascii_str()?;
+
+                    device_manager.make_subscription(
+                        receiver_name_ascii,
+                        rx_chan_index,
+                        transmitter_name_ascii,
+                        transmitter_channel_name_ascii,
+                    )?;
+                }
+            }
         },
+        None => {
+            println!("No command specified. Try \"dante-cli help\"");
+        }
     }
 
     Ok(())

@@ -4,6 +4,8 @@ use dante_control_rs::{print_arc, print_chan, print_cmc, print_dbc, DanteDeviceM
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -63,18 +65,23 @@ enum ControlCommands {
         /// Channel id of the dante device to transmit the new subscription
         transmitter_channel_name: String,
 
-        /// Name of the dante device to receive the new subscription
-        receiver_name: String,
+        /// Ip of the dante device to receive the new subscription
+        receiver_ip_string: String,
 
         /// Channel id of the dante device to receive the new subscription
         receiver_channel_index: u16,
-
-        /// Seconds to wait for mDNS to resolve before making subscription
-        #[arg(default_value_t = 5.0, short, long)]
-        time: f32,
     },
 
-    /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverDeviceName. Note the receiver using an index instead of a channel name.
+    /// Make subscription
+    ClearSubscription {
+        /// Ip of the dante device to receive the new subscription
+        receiver_ip_string: String,
+
+        /// Channel id of the dante device to receive the new subscription
+        receiver_channel_index: u16,
+    },
+
+    /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverIp. Note the receiver using an index instead of a channel name. Clear the subscription by only providing the receiver ip and channel index: receiver_index@receiver_ip
     MakeSubscriptionsFromFile {
         /// Path of file to read from.
         file_path: String,
@@ -211,27 +218,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ControlCommands::MakeSubscription {
                 transmitter_name,
                 transmitter_channel_name,
-                receiver_name,
+                receiver_ip_string,
                 receiver_channel_index,
-                time,
             } => {
-                let receiver_name_ascii = receiver_name.as_ascii_str()?;
+                let receiver_ip = Ipv4Addr::from_str(receiver_ip_string)?;
                 let transmitter_name_ascii = transmitter_name.as_ascii_str()?;
                 let transmitter_channel_name_ascii = transmitter_channel_name.as_ascii_str()?;
 
                 let mut device_manager = DanteDeviceManager::new();
-                device_manager.start_discovery()?;
-
-                if !args.quiet {
-                    println!("Discovering Devices...");
-                }
-
-                sleep(Duration::from_secs_f32(*time));
-
-                device_manager.stop_discovery();
 
                 device_manager.make_subscription(
-                    receiver_name_ascii,
+                    &receiver_ip,
                     *receiver_channel_index,
                     transmitter_name_ascii,
                     transmitter_channel_name_ascii,
@@ -239,40 +236,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             ControlCommands::MakeSubscriptionsFromFile { file_path, time } => {
                 let mut device_manager = DanteDeviceManager::new();
-                device_manager.start_discovery()?;
-
-                if !args.quiet {
-                    println!("Discovering Devices...");
-                }
-
-                sleep(Duration::from_secs_f32(*time));
-
-                device_manager.stop_discovery();
 
                 let file = File::open(file_path)?;
                 let lines = io::BufReader::new(file).lines();
                 for line in lines.flatten() {
-                    let (tx, rx) = line.split_once(':').ok_or(ParsingError::TxRxDelimiter)?;
-                    let (tx_chan, tx_device) =
-                        tx.split_once('@').ok_or(ParsingError::TxDelimiter)?;
-                    let (rx_chan, rx_device) =
-                        rx.split_once('@').ok_or(ParsingError::RxDelimiter)?;
-                    let rx_chan_index: u16 = match rx_chan.parse() {
-                        Ok(chan_index) => Ok(chan_index),
-                        Err(_) => Err(ParsingError::RxChanIndexParse),
-                    }?;
+                    if line.contains(':') {
+                        let (tx, rx) = line.split_once(':').ok_or(ParsingError::TxRxDelimiter)?;
+                        let (tx_chan, tx_device) =
+                            tx.split_once('@').ok_or(ParsingError::TxDelimiter)?;
+                        let (rx_chan, rx_ip_string) =
+                            rx.split_once('@').ok_or(ParsingError::RxDelimiter)?;
+                        let rx_chan_index: u16 = match rx_chan.parse() {
+                            Ok(chan_index) => Ok(chan_index),
+                            Err(_) => Err(ParsingError::RxChanIndexParse),
+                        }?;
 
-                    let receiver_name_ascii = rx_device.as_ascii_str()?;
-                    let transmitter_name_ascii = tx_device.as_ascii_str()?;
-                    let transmitter_channel_name_ascii = tx_chan.as_ascii_str()?;
+                        let receiver_ip = Ipv4Addr::from_str(rx_ip_string)?;
+                        let transmitter_name_ascii = tx_device.as_ascii_str()?;
+                        let transmitter_channel_name_ascii = tx_chan.as_ascii_str()?;
 
-                    device_manager.make_subscription(
-                        receiver_name_ascii,
-                        rx_chan_index,
-                        transmitter_name_ascii,
-                        transmitter_channel_name_ascii,
-                    )?;
+                        device_manager.make_subscription(
+                            &receiver_ip,
+                            rx_chan_index,
+                            transmitter_name_ascii,
+                            transmitter_channel_name_ascii,
+                        )?;
+                    } else {
+                        let (rx_chan, rx_ip_string) =
+                            line.split_once('@').ok_or(ParsingError::RxDelimiter)?;
+                        let rx_chan_index: u16 = match rx_chan.parse() {
+                            Ok(chan_index) => Ok(chan_index),
+                            Err(_) => Err(ParsingError::RxChanIndexParse),
+                        }?;
+
+                        let receiver_ip = Ipv4Addr::from_str(rx_ip_string)?;
+
+                        device_manager.clear_subscription(&receiver_ip, rx_chan_index)?;
+                    }
                 }
+            }
+            ControlCommands::ClearSubscription {
+                receiver_ip_string,
+                receiver_channel_index,
+            } => {
+                let receiver_ip = Ipv4Addr::from_str(receiver_ip_string)?;
+
+                let mut device_manager = DanteDeviceManager::new();
+
+                device_manager.clear_subscription(&receiver_ip, *receiver_channel_index)?;
             }
         },
         None => {

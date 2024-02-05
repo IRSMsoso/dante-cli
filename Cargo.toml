@@ -1,6 +1,6 @@
 [package]
 name = "dante-cli"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 authors = ["Cameron VanderTuig"]
 description = "A Dante discovery and control command line tool utilizing dante-control-rs"
@@ -13,7 +13,7 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.4.2", features = ["derive"] }
-dante-control-rs = {  path = "../dante-control-rs", version = "0.6.0"}
+dante-control-rs = {  path = "../dante-control-rs", version = "0.7.0"}
 stderrlog = "0.5.4"
 ascii = "1.1.0"
 

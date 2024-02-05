@@ -297,7 +297,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         device_manager.clear_subscription(version, &receiver_ip, rx_chan_index)?;
                     }
-                    if (*time > 0.0) {
+                    if *time > 0.0 {
                         sleep(Duration::from_secs_f32(*time));
                     }
                 }

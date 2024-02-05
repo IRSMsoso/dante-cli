@@ -1,6 +1,6 @@
 use ascii::AsAsciiStr;
 use clap::{arg, Parser, Subcommand};
-use dante_control_rs::{print_arc, print_chan, print_cmc, print_dbc, DanteDeviceManager};
+use dante_control_rs::{print_arc, print_chan, print_cmc, print_dbc, DanteDeviceManager, DanteVersion};
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
@@ -59,6 +59,9 @@ enum Commands {
 enum ControlCommands {
     /// Make subscription
     MakeSubscription {
+        /// Dante version to use. Possible values are "4.4.1.3" and "4.2.1.3"
+        version: String,
+
         /// Name of the dante device to transmit the new subscription
         transmitter_name: String,
 
@@ -74,6 +77,9 @@ enum ControlCommands {
 
     /// Make subscription
     ClearSubscription {
+        /// Dante version to use. Possible values are "4.4.1.3" and "4.2.1.3"
+        version: String,
+
         /// Ip of the dante device to receive the new subscription
         receiver_ip_string: String,
 
@@ -85,10 +91,6 @@ enum ControlCommands {
     MakeSubscriptionsFromFile {
         /// Path of file to read from.
         file_path: String,
-
-        /// Seconds to wait for mDNS to resolve before making subscriptions
-        #[arg(default_value_t = 5.0, short, long)]
-        time: f32,
     },
 }
 
@@ -124,6 +126,13 @@ enum DebugCommands {
 }
 
 #[derive(thiserror::Error, Debug)]
+pub enum SubscriptionError {
+    #[error("Couldn't parse version argument into a valid Dante Version.")]
+    VersionParse,
+}
+
+
+#[derive(thiserror::Error, Debug)]
 pub enum ParsingError {
     #[error("Could not properly detect : between the transmitting and receiving devices")]
     TxRxDelimiter,
@@ -131,6 +140,8 @@ pub enum ParsingError {
     TxDelimiter,
     #[error("Could not properly detect @ between the receiving channel index and device name")]
     RxDelimiter,
+    #[error("Could not properly detect | between the version and tx/rx devices")]
+    VersionDelimiter,
     #[error("Could not parse the receiving channel index into an integer")]
     RxChanIndexParse,
 }
@@ -216,11 +227,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Some(Commands::Control(control_command)) => match control_command {
             ControlCommands::MakeSubscription {
+                version,
                 transmitter_name,
                 transmitter_channel_name,
                 receiver_ip_string,
                 receiver_channel_index,
             } => {
+                let version = DanteVersion::from_string(version).ok_or(SubscriptionError::VersionParse)?;
+
+
                 let receiver_ip = Ipv4Addr::from_str(receiver_ip_string)?;
                 let transmitter_name_ascii = transmitter_name.as_ascii_str()?;
                 let transmitter_channel_name_ascii = transmitter_channel_name.as_ascii_str()?;
@@ -228,20 +243,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut device_manager = DanteDeviceManager::new();
 
                 device_manager.make_subscription(
+                    version,
                     &receiver_ip,
                     *receiver_channel_index,
                     transmitter_name_ascii,
                     transmitter_channel_name_ascii,
                 )?;
             }
-            ControlCommands::MakeSubscriptionsFromFile { file_path, time } => {
+            ControlCommands::MakeSubscriptionsFromFile { file_path} => {
                 let mut device_manager = DanteDeviceManager::new();
 
                 let file = File::open(file_path)?;
                 let lines = io::BufReader::new(file).lines();
                 for line in lines.flatten() {
-                    if line.contains(':') {
-                        let (tx, rx) = line.split_once(':').ok_or(ParsingError::TxRxDelimiter)?;
+                    let (version_string, command_string) = line.split_once('|').ok_or(ParsingError::VersionDelimiter)?;
+                    let version: DanteVersion = DanteVersion::from_string(version_string).ok_or(SubscriptionError::VersionParse)?;
+
+                    if command_string.contains(':') {
+                        let (tx, rx) = command_string.split_once(':').ok_or(ParsingError::TxRxDelimiter)?;
                         let (tx_chan, tx_device) =
                             tx.split_once('@').ok_or(ParsingError::TxDelimiter)?;
                         let (rx_chan, rx_ip_string) =
@@ -256,6 +275,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let transmitter_channel_name_ascii = tx_chan.as_ascii_str()?;
 
                         device_manager.make_subscription(
+                            version,
                             &receiver_ip,
                             rx_chan_index,
                             transmitter_name_ascii,
@@ -263,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         )?;
                     } else {
                         let (rx_chan, rx_ip_string) =
-                            line.split_once('@').ok_or(ParsingError::RxDelimiter)?;
+                            command_string.split_once('@').ok_or(ParsingError::RxDelimiter)?;
                         let rx_chan_index: u16 = match rx_chan.parse() {
                             Ok(chan_index) => Ok(chan_index),
                             Err(_) => Err(ParsingError::RxChanIndexParse),
@@ -271,19 +291,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         let receiver_ip = Ipv4Addr::from_str(rx_ip_string)?;
 
-                        device_manager.clear_subscription(&receiver_ip, rx_chan_index)?;
+                        device_manager.clear_subscription(version, &receiver_ip, rx_chan_index)?;
                     }
                 }
             }
             ControlCommands::ClearSubscription {
+                version,
                 receiver_ip_string,
                 receiver_channel_index,
             } => {
+                let version = DanteVersion::from_string(version).ok_or(SubscriptionError::VersionParse)?;
+
                 let receiver_ip = Ipv4Addr::from_str(receiver_ip_string)?;
 
                 let mut device_manager = DanteDeviceManager::new();
 
-                device_manager.clear_subscription(&receiver_ip, *receiver_channel_index)?;
+                device_manager.clear_subscription(version, &receiver_ip, *receiver_channel_index)?;
             }
         },
         None => {

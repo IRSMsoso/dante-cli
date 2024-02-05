@@ -91,6 +91,10 @@ enum ControlCommands {
     MakeSubscriptionsFromFile {
         /// Path of file to read from.
         file_path: String,
+
+        /// Seconds to wait between each subscription.
+        #[arg(default_value_t = 0.0, short, long)]
+        time: f32,
     },
 }
 
@@ -250,7 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     transmitter_channel_name_ascii,
                 )?;
             }
-            ControlCommands::MakeSubscriptionsFromFile { file_path} => {
+            ControlCommands::MakeSubscriptionsFromFile { file_path, time } => {
                 let mut device_manager = DanteDeviceManager::new();
 
                 let file = File::open(file_path)?;
@@ -292,6 +296,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let receiver_ip = Ipv4Addr::from_str(rx_ip_string)?;
 
                         device_manager.clear_subscription(version, &receiver_ip, rx_chan_index)?;
+                    }
+                    if (*time > 0.0) {
+                        sleep(Duration::from_secs_f32(*time));
                     }
                 }
             }

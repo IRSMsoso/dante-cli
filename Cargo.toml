@@ -1,6 +1,6 @@
 [package]
 name = "dante-cli"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2021"
 authors = ["Cameron VanderTuig"]
 description = "A Dante discovery and control command line tool utilizing dante-control-rs"

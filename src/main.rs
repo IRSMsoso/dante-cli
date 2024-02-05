@@ -93,7 +93,7 @@ enum ControlCommands {
         file_path: String,
 
         /// Seconds to wait between each subscription.
-        #[arg(default_value_t = 0.0, short, long)]
+        #[arg(default_value_t = 0.01, short, long)]
         time: f32,
     },
 }

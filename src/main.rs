@@ -58,7 +58,7 @@ enum Commands {
 #[derive(Subcommand, Debug)]
 enum ControlCommands {
     /// Make subscription
-    MakeSubscription {
+    Make {
         /// Dante version to use. Possible values are "4.4.1.3" and "4.2.1.3"
         version: String,
 
@@ -76,7 +76,7 @@ enum ControlCommands {
     },
 
     /// Make subscription
-    ClearSubscription {
+    Clear {
         /// Dante version to use. Possible values are "4.4.1.3" and "4.2.1.3"
         version: String,
 
@@ -88,7 +88,7 @@ enum ControlCommands {
     },
 
     /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverIp. Note the receiver using an index instead of a channel name. Clear the subscription by only providing the receiver ip and channel index: receiver_index@receiver_ip
-    MakeSubscriptionsFromFile {
+    FromFile {
         /// Path of file to read from.
         file_path: String,
 
@@ -230,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Some(Commands::Control(control_command)) => match control_command {
-            ControlCommands::MakeSubscription {
+            ControlCommands::Make {
                 version,
                 transmitter_name,
                 transmitter_channel_name,
@@ -247,14 +247,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut device_manager = DanteDeviceManager::new();
 
                 device_manager.make_subscription(
-                    version,
+                    &version,
                     &receiver_ip,
                     *receiver_channel_index,
                     transmitter_name_ascii,
                     transmitter_channel_name_ascii,
                 )?;
             }
-            ControlCommands::MakeSubscriptionsFromFile { file_path, time } => {
+            ControlCommands::FromFile { file_path, time } => {
                 let mut device_manager = DanteDeviceManager::new();
 
                 let file = File::open(file_path)?;
@@ -279,7 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let transmitter_channel_name_ascii = tx_chan.as_ascii_str()?;
 
                         device_manager.make_subscription(
-                            version,
+                            &version,
                             &receiver_ip,
                             rx_chan_index,
                             transmitter_name_ascii,
@@ -295,14 +295,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         let receiver_ip = Ipv4Addr::from_str(rx_ip_string)?;
 
-                        device_manager.clear_subscription(version, &receiver_ip, rx_chan_index)?;
+                        device_manager.clear_subscription(&version, &receiver_ip, rx_chan_index)?;
                     }
                     if *time > 0.0 {
                         sleep(Duration::from_secs_f32(*time));
                     }
                 }
             }
-            ControlCommands::ClearSubscription {
+            ControlCommands::Clear {
                 version,
                 receiver_ip_string,
                 receiver_channel_index,
@@ -313,7 +313,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut device_manager = DanteDeviceManager::new();
 
-                device_manager.clear_subscription(version, &receiver_ip, *receiver_channel_index)?;
+                device_manager.clear_subscription(&version, &receiver_ip, *receiver_channel_index)?;
             }
         },
         None => {

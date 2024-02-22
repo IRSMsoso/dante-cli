@@ -87,7 +87,7 @@ enum ControlCommands {
         receiver_channel_index: u16,
     },
 
-    /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverIp. Note the receiver using an index instead of a channel name. Clear the subscription by only providing the receiver ip and channel index: receiver_index@receiver_ip
+    /// Make a series of subscriptions as specified in plaintext from a file, where each line is another subscription and looks like this: DanteVersion|TransmitterChannelName@TransmitterDeviceName:ReceiverChannelIndex@ReceiverIp. Note the receiver using an index instead of a channel name. Clear the subscription by only providing the version, receiver ip, and channel index: DanteVersion|receiver_index@receiver_ip
     FromFile {
         /// Path of file to read from.
         file_path: String,
